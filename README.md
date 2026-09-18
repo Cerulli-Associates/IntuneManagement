@@ -76,6 +76,40 @@ Start-IntuneManagement.ps1 -Silent -SilentBatchFile "C:\Temp\BatchImport.json" -
 
 Start-IntuneManagement.ps1 -Silent -SilentBatchFile "C:\Temp\BatchImport.json" -TenantId "00000000-0000-0000-0000-000000000000"
 
+### Daily scheduled documentation
+
+For a daily unattended documentation job, use a dedicated batch settings file rather than relying on interactive settings. In the UI, open **Bulk > Document Types**, select the object types to document, choose the output provider, and click **Save** to create `BulkDocumentation.json`. Review the generated file before scheduling it.
+
+The following settings are recommended for a daily baseline:
+
+| Setting | Recommendation |
+|---|---|
+| Object types | Select the profiles and policies that should be included in the report. Start with the required types instead of selecting everything, then expand after validating runtime and report size. |
+| Output type | **Markdown** for unattended jobs; it does not require Microsoft Word and is easy to archive or publish. Word/PDF output requires Word interop and is less suitable for a non-interactive scheduled task. |
+| Output file | Use a date token, for example `%MyDocuments%\IntuneDocumentation\%Organization%-%Date%.md`. The supported token is `%Date%`. A practical Windows path is `%ProgramData%\IntuneManagement\Documentation\%Organization%-%Date%.md`. |
+| Output file mode | **Single file** for a daily snapshot. Use **One file per object** only when individual policy files are needed for downstream processing. |
+| Language | `en` unless the report is intended for another supported Intune language. |
+| Include CSS | Enabled when the Markdown is reviewed as rendered HTML; disable it if the destination only consumes plain Markdown. |
+| Open document | Disabled for scheduled execution. |
+| Skip date in generated info | Disabled when each daily report should record when it was generated. |
+| Unconfigured/default values | Keep them enabled for audit completeness. Skip disabled or unconfigured properties only when report size is a higher priority than fidelity. |
+| Assignments and scripts | Include both for a configuration baseline. Disable them only if the report is too large or the output is intentionally settings-only. |
+
+The output path must exist or be writable by the account running the scheduled task. Keep the batch JSON and output directory outside the repository, and protect the JSON and any credential material with the same permissions as the service account.
+
+Create a Windows Task Scheduler task with **Run whether user is logged on or not**, the required service account, and a daily trigger at a low-traffic time. Use `powershell.exe` (or `pwsh.exe` if that is the supported runtime in your environment) with an action equivalent to:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\Path\To\IntuneManagement\Start-IntuneManagement.ps1" `
+  -Silent `
+  -TenantId "00000000-0000-0000-0000-000000000000" `
+  -AppId "00000000-0000-0000-0000-000000000001" `
+  -Certificate "THUMBPRINT_OR_CERTIFICATE_VALUE" `
+  -SilentBatchFile "C:\ProgramData\IntuneManagement\BulkDocumentation.json"
+```
+
+Prefer certificate-based authentication over a client secret for a long-lived scheduled task. Grant the application only the Microsoft Graph permissions required to read the selected Intune object types, verify certificate access for the scheduled-task account, and test the exact command manually before enabling the daily trigger. Capture the task's exit code and application log, and retain dated reports according to the organization's documentation-retention policy.
+
 ## Documentation
 
 This script has an extension that can document profiles and policies in Intune. The output is using the same language strings as the Intune portal.
